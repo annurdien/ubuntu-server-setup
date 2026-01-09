@@ -1,0 +1,36 @@
+---
+# Backup role - Backup system configurations
+
+- name: Create backup directory
+  file:
+    path: "{{ backup_directory }}"
+    state: directory
+    mode: '0700'
+
+- name: Create timestamped backup
+  archive:
+    path:
+      - /etc/ssh/sshd_config
+      - /etc/ufw
+      - /etc/fail2ban
+      - /etc/cloudflared
+    dest: "{{ backup_directory }}/backup-{{ ansible_date_time.iso8601_basic_short }}.tar.gz"
+    format: gz
+  register: backup_result
+
+- name: Display backup location
+  debug:
+    msg: "Backup created: {{ backup_result.dest }}"
+
+- name: Clean old backups
+  find:
+    paths: "{{ backup_directory }}"
+    patterns: "backup-*.tar.gz"
+    age: "{{ backup_retention_days }}d"
+  register: old_backups
+
+- name: Remove old backups
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ old_backups.files }}"

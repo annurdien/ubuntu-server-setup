@@ -1,0 +1,25 @@
+---
+# Common role default variables
+system_timezone: "{{ timezone | default('UTC') }}"
+ntp_enabled: "{{ ntp_enabled | default(true) }}"
+
+essential_packages:
+  - curl
+  - wget
+  - git
+  - vim
+  - htop
+  - net-tools
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - python3-pip
+  - software-properties-common
+
+unattended_upgrades_enabled: true
+unattended_upgrades_auto_reboot: false
+unattended_upgrades_auto_reboot_time: "03:00"

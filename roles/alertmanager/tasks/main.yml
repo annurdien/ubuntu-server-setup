@@ -1,0 +1,50 @@
+---
+# Alertmanager role - Setup alert management
+
+- name: Create Alertmanager user
+  user:
+    name: "{{ alertmanager_user }}"
+    system: yes
+    shell: /usr/sbin/nologin
+    create_home: no
+
+- name: Create Alertmanager directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ alertmanager_user }}"
+    mode: '0755'
+  loop:
+    - "{{ alertmanager_install_dir }}"
+    - "{{ alertmanager_config_dir }}"
+    - "{{ alertmanager_data_dir }}"
+
+- name: Download and extract Alertmanager
+  unarchive:
+    src: "https://github.com/prometheus/alertmanager/releases/download/v{{ alertmanager_version }}/alertmanager-{{ alertmanager_version }}.linux-amd64.tar.gz"
+    dest: "{{ alertmanager_install_dir }}"
+    remote_src: yes
+    extra_opts: [--strip-components=1]
+    owner: "{{ alertmanager_user }}"
+
+- name: Configure Alertmanager
+  template:
+    src: alertmanager.yml.j2
+    dest: "{{ alertmanager_config_dir }}/alertmanager.yml"
+    owner: "{{ alertmanager_user }}"
+    mode: '0644'
+  notify: restart alertmanager
+
+- name: Create Alertmanager systemd service
+  template:
+    src: alertmanager.service.j2
+    dest: /etc/systemd/system/alertmanager.service
+    mode: '0644'
+  notify: restart alertmanager
+
+- name: Enable and start Alertmanager
+  systemd:
+    name: alertmanager
+    enabled: yes
+    state: started
+    daemon_reload: yes

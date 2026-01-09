@@ -1,0 +1,20 @@
+# Example inventory file
+# Copy this file to inventory.ini and update with your server details
+# WARNING: Do NOT commit inventory.ini to version control
+
+[servers]
+# Production servers
+server1 ansible_host=1.2.3.4 ansible_user=root
+server2 ansible_host=5.6.7.8 ansible_user=root
+
+[servers:vars]
+ansible_ssh_private_key_file=~/.ssh/id_ed25519
+ansible_python_interpreter=/usr/bin/python3
+
+[monitoring]
+# Servers that will run the monitoring stack
+monitor1 ansible_host=1.2.3.4 ansible_user=root
+
+[monitoring:vars]
+ansible_ssh_private_key_file=~/.ssh/id_ed25519
+ansible_python_interpreter=/usr/bin/python3

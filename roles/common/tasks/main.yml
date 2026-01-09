@@ -1,0 +1,87 @@
+---
+# Common role - System updates and base configuration
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Upgrade all packages
+  apt:
+    upgrade: dist
+    autoremove: yes
+    autoclean: yes
+  register: upgrade_result
+
+- name: Install essential packages
+  apt:
+    name: "{{ essential_packages }}"
+    state: present
+    update_cache: yes
+
+- name: Set timezone
+  timezone:
+    name: "{{ system_timezone }}"
+
+- name: Configure NTP
+  block:
+    - name: Install systemd-timesyncd
+      apt:
+        name: systemd-timesyncd
+        state: present
+
+    - name: Enable and start systemd-timesyncd
+      systemd:
+        name: systemd-timesyncd
+        enabled: yes
+        state: started
+  when: ntp_enabled
+
+- name: Configure unattended-upgrades
+  block:
+    - name: Copy unattended-upgrades configuration
+      template:
+        src: 50unattended-upgrades.j2
+        dest: /etc/apt/apt.conf.d/50unattended-upgrades
+        mode: '0644'
+      notify: restart unattended-upgrades
+
+    - name: Enable automatic updates
+      copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+          APT::Periodic::AutocleanInterval "7";
+        mode: '0644'
+
+    - name: Enable unattended-upgrades service
+      systemd:
+        name: unattended-upgrades
+        enabled: yes
+        state: started
+  when: unattended_upgrades_enabled
+
+- name: Disable unnecessary services
+  systemd:
+    name: "{{ item }}"
+    enabled: no
+    state: stopped
+  loop:
+    - snapd
+    - apport
+  ignore_errors: yes
+
+- name: Configure kernel parameters
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_set: yes
+    state: present
+    reload: yes
+  loop:
+    - { name: 'net.ipv4.tcp_syncookies', value: '1' }
+    - { name: 'net.ipv4.ip_forward', value: '0' }
+    - { name: 'net.ipv4.conf.all.send_redirects', value: '0' }
+    - { name: 'net.ipv4.conf.all.accept_redirects', value: '0' }
+    - { name: 'vm.swappiness', value: '10' }

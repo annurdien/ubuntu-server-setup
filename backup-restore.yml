@@ -1,0 +1,203 @@
+---
+# Backup and Restore Playbook
+# Manage backups of system configurations
+
+- name: Backup and Restore System Configurations
+  hosts: servers
+  become: yes
+  gather_facts: yes
+
+  vars_prompt:
+    - name: backup_action
+      prompt: |
+        What do you want to do?
+        1. Create a new backup
+        2. Restore from latest backup
+        3. Restore from specific backup
+        4. List available backups
+        5. Clean old backups
+        Enter choice (1-5)
+      private: no
+
+  pre_tasks:
+    - name: Validate action choice
+      fail:
+        msg: "Invalid choice. Please select 1-5"
+      when: backup_action not in ['1', '2', '3', '4', '5']
+
+    - name: Set action flags
+      set_fact:
+        do_backup: "{{ backup_action == '1' }}"
+        do_restore_latest: "{{ backup_action == '2' }}"
+        do_restore_specific: "{{ backup_action == '3' }}"
+        do_list_backups: "{{ backup_action == '4' }}"
+        do_clean_backups: "{{ backup_action == '5' }}"
+
+  tasks:
+    # ===========================
+    # List Backups
+    # ===========================
+    - name: List available backups
+      block:
+        - name: Find all backups
+          find:
+            paths: "{{ backup_directory | default('/opt/backups') }}"
+            patterns: "backup-*.tar.gz"
+          register: backup_files
+
+        - name: Display available backups
+          debug:
+            msg: "{{ backup_files.files | map(attribute='path') | list }}"
+
+        - name: Show backup count
+          debug:
+            msg: "Total backups: {{ backup_files.files | length }}"
+      when: do_list_backups
+
+    # ===========================
+    # Create Backup
+    # ===========================
+    - name: Create new backup
+      include_role:
+        name: backup
+      when: do_backup
+
+    # ===========================
+    # Restore from Latest Backup
+    # ===========================
+    - name: Restore from latest backup
+      block:
+        - name: Find latest backup
+          find:
+            paths: "{{ backup_directory | default('/opt/backups') }}"
+            patterns: "backup-*.tar.gz"
+          register: backup_files
+
+        - name: Fail if no backups found
+          fail:
+            msg: "No backups found in {{ backup_directory | default('/opt/backups') }}"
+          when: backup_files.files | length == 0
+
+        - name: Get latest backup
+          set_fact:
+            latest_backup: "{{ (backup_files.files | sort(attribute='mtime', reverse=true) | first).path }}"
+
+        - name: Display backup to restore
+          debug:
+            msg: "Restoring from: {{ latest_backup }}"
+
+        - name: Confirm restore
+          pause:
+            prompt: "Press Enter to restore from {{ latest_backup }}, or Ctrl+C to cancel"
+
+        - name: Restore from backup
+          include_role:
+            name: restore
+          vars:
+            restore_backup_file: "{{ latest_backup }}"
+      when: do_restore_latest
+
+    # ===========================
+    # Restore from Specific Backup
+    # ===========================
+    - name: Restore from specific backup
+      block:
+        - name: Find all backups
+          find:
+            paths: "{{ backup_directory | default('/opt/backups') }}"
+            patterns: "backup-*.tar.gz"
+          register: backup_files
+
+        - name: Fail if no backups found
+          fail:
+            msg: "No backups found in {{ backup_directory | default('/opt/backups') }}"
+          when: backup_files.files | length == 0
+
+        - name: Display available backups
+          debug:
+            msg: "{{ backup_files.files | map(attribute='path') | list }}"
+
+        - name: Prompt for backup file
+          pause:
+            prompt: "Enter the full path of the backup file to restore"
+          register: backup_file_input
+
+        - name: Verify backup file exists
+          stat:
+            path: "{{ backup_file_input.user_input }}"
+          register: backup_stat
+
+        - name: Fail if backup doesn't exist
+          fail:
+            msg: "Backup file not found: {{ backup_file_input.user_input }}"
+          when: not backup_stat.stat.exists
+
+        - name: Confirm restore
+          pause:
+            prompt: "Press Enter to restore from {{ backup_file_input.user_input }}, or Ctrl+C to cancel"
+
+        - name: Restore from backup
+          include_role:
+            name: restore
+          vars:
+            restore_backup_file: "{{ backup_file_input.user_input }}"
+      when: do_restore_specific
+
+    # ===========================
+    # Clean Old Backups
+    # ===========================
+    - name: Clean old backups
+      block:
+        - name: Find old backups
+          find:
+            paths: "{{ backup_directory | default('/opt/backups') }}"
+            patterns: "backup-*.tar.gz"
+            age: "{{ backup_retention_days | default(30) }}d"
+          register: old_backups
+
+        - name: Display backups to delete
+          debug:
+            msg: "Will delete {{ old_backups.files | length }} old backups"
+
+        - name: List old backups
+          debug:
+            msg: "{{ old_backups.files | map(attribute='path') | list }}"
+          when: old_backups.files | length > 0
+
+        - name: Confirm deletion
+          pause:
+            prompt: "Press Enter to delete {{ old_backups.files | length }} old backups, or Ctrl+C to cancel"
+          when: old_backups.files | length > 0
+
+        - name: Delete old backups
+          file:
+            path: "{{ item.path }}"
+            state: absent
+          loop: "{{ old_backups.files }}"
+          when: old_backups.files | length > 0
+
+        - name: Show deletion result
+          debug:
+            msg: "Deleted {{ old_backups.files | length }} old backups"
+          when: old_backups.files | length > 0
+
+        - name: Show no backups to delete
+          debug:
+            msg: "No old backups to delete (older than {{ backup_retention_days | default(30) }} days)"
+          when: old_backups.files | length == 0
+      when: do_clean_backups
+
+  post_tasks:
+    - name: Display completion message
+      debug:
+        msg:
+          - "=========================================="
+          - "Backup operation completed!"
+          - "=========================================="
+          - ""
+          - "Backup directory: {{ backup_directory | default('/opt/backups') }}"
+          - ""
+          - "Common operations:"
+          - "- Create backup: ansible-playbook backup-restore.yml (select 1)"
+          - "- Restore latest: ansible-playbook backup-restore.yml (select 2)"
+          - "- List backups: ansible-playbook backup-restore.yml (select 4)"

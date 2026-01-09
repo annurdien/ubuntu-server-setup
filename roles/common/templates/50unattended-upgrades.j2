@@ -1,0 +1,28 @@
+// Unattended-Upgrade::Origins-Pattern controls which packages are
+// upgraded.
+Unattended-Upgrade::Origins-Pattern {
+        "origin=Ubuntu,archive=${distro_codename}-security";
+        "origin=Ubuntu,archive=${distro_codename}-updates";
+};
+
+// List of packages to not update automatically
+Unattended-Upgrade::Package-Blacklist {
+};
+
+// Do automatic removal of unused dependencies
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+
+// Do automatic removal of new unused dependencies after the upgrade
+Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
+
+// Automatically reboot *WITHOUT CONFIRMATION* if required
+Unattended-Upgrade::Automatic-Reboot "{{ unattended_upgrades_auto_reboot | lower }}";
+
+// Automatically reboot time
+Unattended-Upgrade::Automatic-Reboot-Time "{{ unattended_upgrades_auto_reboot_time }}";
+
+{% if unattended_upgrades_email is defined and unattended_upgrades_email %}
+// Send email to this address for problems or packages upgrades
+Unattended-Upgrade::Mail "{{ unattended_upgrades_email }}";
+Unattended-Upgrade::MailReport "on-change";
+{% endif %}

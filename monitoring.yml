@@ -1,0 +1,158 @@
+---
+# Monitoring Stack Playbook
+# Setup Prometheus, Grafana, and Alertmanager for system monitoring
+
+- name: Setup Monitoring Stack
+  hosts: monitoring
+  become: yes
+  gather_facts: yes
+
+  pre_tasks:
+    - name: Display monitoring setup information
+      debug:
+        msg:
+          - "Starting monitoring stack setup for {{ inventory_hostname }}"
+          - "Components: Prometheus, Node Exporter, Grafana, Alertmanager"
+          - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+    - name: Verify Ubuntu version
+      fail:
+        msg: "This playbook requires Ubuntu 20.04 or later"
+      when: 
+        - ansible_distribution != "Ubuntu"
+        - ansible_distribution_version is version('20.04', '<')
+
+    - name: Check if monitoring variables are loaded
+      fail:
+        msg: "Please ensure group_vars/monitoring.yml is configured"
+      when: prometheus_version is not defined
+
+  roles:
+    - role: prometheus
+      tags: [prometheus, monitoring]
+    
+    - role: node_exporter
+      tags: [node_exporter, monitoring]
+    
+    - role: alertmanager
+      tags: [alertmanager, monitoring]
+    
+    - role: grafana
+      tags: [grafana, monitoring]
+    
+    - role: monitoring_tunnel
+      tags: [tunnel, monitoring]
+      when: cloudflare_tunnel_token is defined
+
+  post_tasks:
+    - name: Wait for services to be ready
+      wait_for:
+        port: "{{ item }}"
+        timeout: 60
+      loop:
+        - 9090  # Prometheus
+        - 9100  # Node Exporter
+        - 9093  # Alertmanager
+        - 3000  # Grafana
+      ignore_errors: yes
+
+    - name: Display completion message
+      debug:
+        msg:
+          - "=========================================="
+          - "Monitoring stack setup completed!"
+          - "=========================================="
+          - ""
+          - "Services:"
+          - "- Prometheus: http://{{ ansible_default_ipv4.address }}:9090"
+          - "- Grafana: http://{{ ansible_default_ipv4.address }}:3000"
+          - "  Login: {{ grafana_admin_user }} / {{ grafana_admin_password }}"
+          - "- Alertmanager: http://{{ ansible_default_ipv4.address }}:9093"
+          - "- Node Exporter: http://{{ ansible_default_ipv4.address }}:9100"
+          - ""
+          - "Cloudflare Tunnel URLs (if configured):"
+          - "- Grafana: https://grafana.{{ domain_name }}"
+          - "- Prometheus: https://prometheus.{{ domain_name }}"
+          - "- Alertmanager: https://alertmanager.{{ domain_name }}"
+          - ""
+          - "IMPORTANT:"
+          - "1. Change Grafana admin password immediately"
+          - "2. Configure Cloudflare Zero Trust for secure access"
+          - "3. Setup email alerts in Alertmanager (if needed)"
+          - "4. Review alert rules in Prometheus"
+          - ""
+          - "Next steps:"
+          - "1. Access Grafana and explore pre-configured dashboards"
+          - "2. Verify Prometheus is collecting metrics"
+          - "3. Test alert rules"
+          - "4. Configure alert notifications"
+
+    - name: Create monitoring info file
+      copy:
+        dest: /root/monitoring-info.txt
+        content: |
+          Monitoring Stack Information
+          ============================
+          
+          Deployment Date: {{ ansible_date_time.iso8601 }}
+          Hostname: {{ inventory_hostname }}
+          
+          Services:
+          ---------
+          Prometheus: http://{{ ansible_default_ipv4.address }}:9090
+          Grafana: http://{{ ansible_default_ipv4.address }}:3000
+            - Username: {{ grafana_admin_user }}
+            - Password: {{ grafana_admin_password }}
+          Alertmanager: http://{{ ansible_default_ipv4.address }}:9093
+          Node Exporter: http://{{ ansible_default_ipv4.address }}:9100
+          
+          Cloudflare Tunnel URLs:
+          -----------------------
+          Grafana: https://grafana.{{ domain_name }}
+          Prometheus: https://prometheus.{{ domain_name }}
+          Alertmanager: https://alertmanager.{{ domain_name }}
+          
+          Configuration:
+          --------------
+          - Prometheus data retention: {{ prometheus_retention_time | default('15d') }}
+          - Alert rules: Enabled (CPU, Memory, Disk, Load)
+          - Email alerts: {{ 'Enabled' if alertmanager_smtp_enabled else 'Disabled' }}
+          
+          Grafana Dashboards:
+          -------------------
+          - Node Exporter Full: Complete system metrics
+          - System Overview: Quick system health overview
+          
+          Maintenance:
+          ------------
+          - Check Prometheus targets: http://{{ ansible_default_ipv4.address }}:9090/targets
+          - View alert rules: http://{{ ansible_default_ipv4.address }}:9090/alerts
+          - Test alert routing: http://{{ ansible_default_ipv4.address }}:9093
+          
+          Logs:
+          -----
+          - Prometheus: sudo journalctl -u prometheus -f
+          - Grafana: sudo journalctl -u grafana-server -f
+          - Alertmanager: sudo journalctl -u alertmanager -f
+          - Node Exporter: sudo journalctl -u node_exporter -f
+        mode: '0600'
+
+    - name: Display security reminder
+      debug:
+        msg:
+          - "=========================================="
+          - "SECURITY REMINDER"
+          - "=========================================="
+          - ""
+          - "1. Change default Grafana password NOW"
+          - "2. Configure Cloudflare Zero Trust authentication"
+          - "3. Close direct access ports in firewall (only allow via tunnel)"
+          - "4. Enable SMTP for alert notifications"
+          - "5. Review and adjust alert thresholds"
+          - ""
+          - "Firewall commands to restrict access:"
+          - "  sudo ufw deny 9090/tcp  # Prometheus"
+          - "  sudo ufw deny 3000/tcp  # Grafana"
+          - "  sudo ufw deny 9093/tcp  # Alertmanager"
+          - ""
+          - "Access via Cloudflare Tunnel only for better security!"

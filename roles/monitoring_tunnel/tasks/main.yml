@@ -1,0 +1,15 @@
+---
+# Monitoring Tunnel role - Expose monitoring via Cloudflare Tunnel
+
+- name: Update cloudflared configuration for monitoring
+  template:
+    src: monitoring-config.yml.j2
+    dest: /etc/cloudflared/config.yml
+    mode: '0600'
+  notify: restart cloudflared
+  when: monitoring_cloudflare_applications is defined
+
+- name: Restart cloudflared
+  systemd:
+    name: cloudflared
+    state: restarted

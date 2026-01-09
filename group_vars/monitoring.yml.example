@@ -1,0 +1,198 @@
+---
+# Example monitoring configuration
+# Copy this file to group_vars/monitoring.yml and update with your settings
+
+# ===========================
+# Prometheus Configuration
+# ===========================
+prometheus_version: "2.45.0"
+prometheus_user: "prometheus"
+prometheus_group: "prometheus"
+prometheus_install_dir: "/opt/prometheus"
+prometheus_config_dir: "/etc/prometheus"
+prometheus_data_dir: "/var/lib/prometheus"
+prometheus_web_listen_address: "0.0.0.0:9090"
+prometheus_retention_time: "15d"
+
+# Scrape configurations
+prometheus_scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+  
+  - job_name: "node_exporter"
+    static_configs:
+      - targets: ["localhost:9100"]
+
+# ===========================
+# Node Exporter Configuration
+# ===========================
+node_exporter_version: "1.6.1"
+node_exporter_user: "node_exporter"
+node_exporter_group: "node_exporter"
+node_exporter_install_dir: "/opt/node_exporter"
+node_exporter_web_listen_address: "0.0.0.0:9100"
+
+# Collectors to enable
+node_exporter_enabled_collectors:
+  - systemd
+  - processes
+
+# Collectors to disable
+node_exporter_disabled_collectors:
+  - mdadm
+
+# ===========================
+# Grafana Configuration
+# ===========================
+grafana_version: "10.0.3"
+grafana_admin_user: "admin"
+grafana_admin_password: "ChangeThisPassword!"  # Change this!
+grafana_port: 3000
+grafana_domain: "grafana.{{ domain_name }}"
+grafana_root_url: "https://{{ grafana_domain }}"
+
+# Datasources
+grafana_datasources:
+  - name: "Prometheus"
+    type: "prometheus"
+    access: "proxy"
+    url: "http://localhost:9090"
+    is_default: true
+
+# Pre-configured dashboards
+grafana_dashboards:
+  - name: "Node Exporter Full"
+    file: "node-exporter-full.json"
+  - name: "System Overview"
+    file: "system-overview.json"
+
+# ===========================
+# Alertmanager Configuration
+# ===========================
+alertmanager_version: "0.26.0"
+alertmanager_user: "alertmanager"
+alertmanager_group: "alertmanager"
+alertmanager_install_dir: "/opt/alertmanager"
+alertmanager_config_dir: "/etc/alertmanager"
+alertmanager_data_dir: "/var/lib/alertmanager"
+alertmanager_web_listen_address: "0.0.0.0:9093"
+
+# Email configuration for alerts
+alertmanager_smtp_enabled: false
+alertmanager_smtp_smarthost: "smtp.gmail.com:587"
+alertmanager_smtp_from: "alerts@example.com"
+alertmanager_smtp_auth_username: "your-email@gmail.com"
+alertmanager_smtp_auth_password: "your-app-password"  # Use app password for Gmail
+
+# Alert receivers
+alertmanager_receivers:
+  - name: "email"
+    email_configs:
+      - to: "admin@example.com"
+        send_resolved: true
+
+# ===========================
+# Alert Rules
+# ===========================
+prometheus_alert_rules:
+  - name: "instance_alerts"
+    rules:
+      - alert: "InstanceDown"
+        expr: "up == 0"
+        for: "5m"
+        labels:
+          severity: "critical"
+        annotations:
+          summary: "Instance {{ $labels.instance }} down"
+          description: "{{ $labels.instance }} has been down for more than 5 minutes."
+  
+  - name: "cpu_alerts"
+    rules:
+      - alert: "HighCPUUsage"
+        expr: '100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80'
+        for: "10m"
+        labels:
+          severity: "warning"
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 80% for more than 10 minutes."
+      
+      - alert: "CriticalCPUUsage"
+        expr: '100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 95'
+        for: "5m"
+        labels:
+          severity: "critical"
+        annotations:
+          summary: "Critical CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 95% for more than 5 minutes."
+  
+  - name: "memory_alerts"
+    rules:
+      - alert: "HighMemoryUsage"
+        expr: '(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 80'
+        for: "10m"
+        labels:
+          severity: "warning"
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 80% for more than 10 minutes."
+      
+      - alert: "CriticalMemoryUsage"
+        expr: '(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 95'
+        for: "5m"
+        labels:
+          severity: "critical"
+        annotations:
+          summary: "Critical memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 95% for more than 5 minutes."
+  
+  - name: "disk_alerts"
+    rules:
+      - alert: "HighDiskUsage"
+        expr: '(1 - (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"})) * 100 > 80'
+        for: "10m"
+        labels:
+          severity: "warning"
+        annotations:
+          summary: "High disk usage on {{ $labels.instance }}"
+          description: "Disk usage on {{ $labels.mountpoint }} is above 80%."
+      
+      - alert: "CriticalDiskUsage"
+        expr: '(1 - (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"})) * 100 > 90'
+        for: "5m"
+        labels:
+          severity: "critical"
+        annotations:
+          summary: "Critical disk usage on {{ $labels.instance }}"
+          description: "Disk usage on {{ $labels.mountpoint }} is above 90%."
+  
+  - name: "load_alerts"
+    rules:
+      - alert: "HighLoadAverage"
+        expr: "node_load15 / count(node_cpu_seconds_total{mode='system'}) WITHOUT (cpu, mode) > 0.8"
+        for: "10m"
+        labels:
+          severity: "warning"
+        annotations:
+          summary: "High load average on {{ $labels.instance }}"
+          description: "Load average is above 80% of CPU cores for more than 10 minutes."
+
+# ===========================
+# Monitoring Tunnel Configuration
+# ===========================
+monitoring_cloudflare_applications:
+  - name: "grafana"
+    service: "http://localhost:3000"
+    hostname: "grafana.{{ domain_name }}"
+    public: false
+  
+  - name: "prometheus"
+    service: "http://localhost:9090"
+    hostname: "prometheus.{{ domain_name }}"
+    public: false
+  
+  - name: "alertmanager"
+    service: "http://localhost:9093"
+    hostname: "alertmanager.{{ domain_name }}"
+    public: false

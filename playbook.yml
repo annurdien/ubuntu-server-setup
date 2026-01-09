@@ -1,0 +1,100 @@
+---
+# Main Security Setup Playbook
+# This playbook sets up a secure Ubuntu server with hardening, monitoring, and Cloudflare Tunnel
+
+- name: Ubuntu Server Security Setup
+  hosts: servers
+  become: yes
+  gather_facts: yes
+
+  pre_tasks:
+    - name: Display setup information
+      debug:
+        msg:
+          - "Starting security setup for {{ inventory_hostname }}"
+          - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "Python: {{ ansible_python_version }}"
+
+    - name: Verify Ubuntu version
+      fail:
+        msg: "This playbook requires Ubuntu 20.04 or later"
+      when: 
+        - ansible_distribution != "Ubuntu"
+        - ansible_distribution_version is version('20.04', '<')
+
+  roles:
+    - role: common
+      tags: [common, base, updates]
+    
+    - role: users
+      tags: [users, security]
+    
+    - role: ssh
+      tags: [ssh, security]
+    
+    - role: firewall
+      tags: [firewall, security]
+    
+    - role: fail2ban
+      tags: [fail2ban, security]
+    
+    - role: cloudflared
+      tags: [cloudflared, tunnel]
+      when: cloudflare_tunnel_token is defined
+    
+    - role: backup
+      tags: [backup]
+      when: backup_enabled | default(true)
+
+  post_tasks:
+    - name: Display completion message
+      debug:
+        msg:
+          - "=========================================="
+          - "Security setup completed successfully!"
+          - "=========================================="
+          - ""
+          - "Next steps:"
+          - "1. Test SSH access through Cloudflare Tunnel"
+          - "2. Verify firewall rules: sudo ufw status verbose"
+          - "3. Check Fail2Ban status: sudo fail2ban-client status sshd"
+          - "4. Review backup location: {{ backup_directory | default('/opt/backups') }}"
+          - ""
+          - "IMPORTANT: Before closing this session:"
+          - "- Verify you can access via Cloudflare Tunnel"
+          - "- Keep this session open as backup access"
+          - ""
+          - "To close SSH port after verification:"
+          - "  sudo ufw delete allow {{ ssh_port | default(22) }}/tcp"
+
+    - name: Create post-deployment info file
+      copy:
+        dest: /root/deployment-info.txt
+        content: |
+          Ubuntu Server Security Setup - Deployment Information
+          ======================================================
+          
+          Deployment Date: {{ ansible_date_time.iso8601 }}
+          Hostname: {{ inventory_hostname }}
+          IP Address: {{ ansible_default_ipv4.address }}
+          
+          Configuration:
+          - Admin User: {{ admin_user.name }}
+          - SSH Port: {{ ssh_port | default(22) }}
+          - Firewall: Enabled (UFW)
+          - Fail2Ban: Enabled
+          - Cloudflare Tunnel: {{ 'Enabled' if cloudflare_tunnel_token is defined else 'Disabled' }}
+          
+          Backups:
+          - Location: {{ backup_directory | default('/opt/backups') }}
+          - Retention: {{ backup_retention_days | default(30) }} days
+          
+          Next Steps:
+          1. Test all access methods
+          2. Verify Cloudflare Tunnel connectivity
+          3. Close SSH port after verification
+          4. Setup monitoring (run monitoring.yml playbook)
+          
+          For rollback: ansible-playbook rollback.yml
+          For backups: ansible-playbook backup-restore.yml
+        mode: '0600'

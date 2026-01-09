@@ -1,0 +1,5 @@
+---
+alertmanager_version: "0.26.0"
+alertmanager_user: "alertmanager"
+alertmanager_install_dir: "/opt/alertmanager"
+alertmanager_config_dir: "/etc/alertmanager"
