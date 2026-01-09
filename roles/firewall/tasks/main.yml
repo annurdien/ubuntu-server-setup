@@ -1,0 +1,36 @@
+---
+# Firewall role - UFW configuration
+
+- name: Install UFW
+  apt:
+    name: ufw
+    state: present
+
+- name: Set default incoming policy
+  ufw:
+    direction: incoming
+    policy: "{{ ufw_default_incoming_policy }}"
+
+- name: Set default outgoing policy
+  ufw:
+    direction: outgoing
+    policy: "{{ ufw_default_outgoing_policy }}"
+
+- name: Allow SSH with rate limiting
+  ufw:
+    rule: limit
+    port: "{{ ssh_port | default(22) }}"
+    proto: tcp
+  when: ufw_ssh_rate_limit
+
+- name: Allow additional ports
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto | default('tcp') }}"
+  loop: "{{ ufw_allowed_ports | default([]) }}"
+
+- name: Enable UFW
+  ufw:
+    state: enabled
+    logging: "{{ ufw_logging | default('on') }}"

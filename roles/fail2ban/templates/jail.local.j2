@@ -1,0 +1,14 @@
+[DEFAULT]
+bantime = {{ fail2ban_bantime }}
+findtime = {{ fail2ban_findtime }}
+maxretry = {{ fail2ban_maxretry }}
+destemail = {{ fail2ban_destemail | default('root@localhost') }}
+sender = {{ fail2ban_sender | default('fail2ban@localhost') }}
+action = {{ fail2ban_action | default('%(action_)s') }}
+
+[sshd]
+enabled = true
+port = {{ ssh_port | default(22) }}
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = {{ fail2ban_maxretry }}

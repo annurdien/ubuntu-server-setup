@@ -1,0 +1,31 @@
+---
+# Users role - Create and manage users
+
+- name: Create admin user
+  user:
+    name: "{{ admin_user.name }}"
+    password: "{{ admin_user.password }}"
+    shell: "{{ admin_user.shell | default('/bin/bash') }}"
+    groups: "{{ admin_user.groups }}"
+    append: yes
+    create_home: yes
+    state: present
+  when: admin_user is defined
+
+- name: Set up SSH key for admin user
+  authorized_key:
+    user: "{{ admin_user.name }}"
+    key: "{{ admin_user.ssh_key }}"
+    state: present
+  when: admin_user is defined and admin_user.ssh_key is defined
+
+- name: Create application users
+  user:
+    name: "{{ item.name }}"
+    comment: "{{ item.comment | default('') }}"
+    system: "{{ item.system | default(true) }}"
+    shell: "{{ item.shell | default('/usr/sbin/nologin') }}"
+    create_home: "{{ item.create_home | default(false) }}"
+    state: present
+  loop: "{{ app_users | default([]) }}"
+  when: app_users is defined

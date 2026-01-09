@@ -1,0 +1,168 @@
+---
+# Rollback Playbook
+# Safely rollback changes made by the security setup playbook
+
+- name: Rollback Security Setup
+  hosts: servers
+  become: yes
+  gather_facts: yes
+
+  vars_prompt:
+    - name: confirm_rollback
+      prompt: "Are you sure you want to rollback? This will restore previous configurations (yes/no)"
+      private: no
+
+    - name: rollback_components
+      prompt: |
+        What do you want to rollback?
+        1. SSH configuration only
+        2. Firewall rules only
+        3. Users only
+        4. Cloudflared only
+        5. Everything (full rollback)
+        Enter choice (1-5)
+      private: no
+
+  pre_tasks:
+    - name: Verify confirmation
+      fail:
+        msg: "Rollback cancelled by user"
+      when: confirm_rollback | lower != 'yes'
+
+    - name: Validate rollback choice
+      fail:
+        msg: "Invalid choice. Please select 1-5"
+      when: rollback_components not in ['1', '2', '3', '4', '5']
+
+    - name: Set rollback flags
+      set_fact:
+        rollback_ssh: "{{ rollback_components in ['1', '5'] }}"
+        rollback_firewall: "{{ rollback_components in ['2', '5'] }}"
+        rollback_users: "{{ rollback_components in ['3', '5'] }}"
+        rollback_cloudflared: "{{ rollback_components in ['4', '5'] }}"
+        rollback_all: "{{ rollback_components == '5' }}"
+
+    - name: Display rollback plan
+      debug:
+        msg:
+          - "=========================================="
+          - "Rollback Plan"
+          - "=========================================="
+          - "SSH: {{ 'Yes' if rollback_ssh else 'No' }}"
+          - "Firewall: {{ 'Yes' if rollback_firewall else 'No' }}"
+          - "Users: {{ 'Yes' if rollback_users else 'No' }}"
+          - "Cloudflared: {{ 'Yes' if rollback_cloudflared else 'No' }}"
+          - ""
+          - "Backups will be restored from: {{ backup_directory | default('/opt/backups') }}"
+
+    - name: Wait for final confirmation
+      pause:
+        prompt: "Press Enter to continue with rollback, or Ctrl+C to cancel"
+
+  tasks:
+    - name: Restore configurations from backup
+      include_role:
+        name: restore
+      vars:
+        restore_ssh: "{{ rollback_ssh }}"
+        restore_firewall: "{{ rollback_firewall }}"
+        restore_users: "{{ rollback_users }}"
+        restore_cloudflared: "{{ rollback_cloudflared }}"
+
+    - name: Stop and disable Cloudflared service
+      systemd:
+        name: cloudflared
+        state: stopped
+        enabled: no
+      when: rollback_cloudflared
+      ignore_errors: yes
+
+    - name: Remove Cloudflared
+      apt:
+        name: cloudflared
+        state: absent
+        purge: yes
+      when: rollback_cloudflared
+      ignore_errors: yes
+
+    - name: Disable Fail2Ban
+      systemd:
+        name: fail2ban
+        state: stopped
+        enabled: no
+      when: rollback_all
+      ignore_errors: yes
+
+    - name: Reset UFW to defaults
+      block:
+        - name: Reset UFW
+          ufw:
+            state: reset
+        
+        - name: Re-enable UFW with allow SSH
+          ufw:
+            rule: allow
+            port: "{{ ssh_port | default(22) }}"
+            proto: tcp
+        
+        - name: Enable UFW
+          ufw:
+            state: enabled
+      when: rollback_firewall
+
+    - name: Remove admin user
+      user:
+        name: "{{ admin_user.name }}"
+        state: absent
+        remove: yes
+      when: rollback_users and admin_user is defined
+      ignore_errors: yes
+
+    - name: Restart SSH service
+      systemd:
+        name: sshd
+        state: restarted
+      when: rollback_ssh
+
+  post_tasks:
+    - name: Display rollback completion message
+      debug:
+        msg:
+          - "=========================================="
+          - "Rollback completed!"
+          - "=========================================="
+          - ""
+          - "Restored components:"
+          - "- SSH: {{ 'Yes' if rollback_ssh else 'No' }}"
+          - "- Firewall: {{ 'Yes' if rollback_firewall else 'No' }}"
+          - "- Users: {{ 'Yes' if rollback_users else 'No' }}"
+          - "- Cloudflared: {{ 'Yes' if rollback_cloudflared else 'No' }}"
+          - ""
+          - "IMPORTANT:"
+          - "- Verify SSH access is working"
+          - "- Check firewall rules: sudo ufw status"
+          - "- Review restored configurations"
+          - ""
+          - "If you need to restore from a specific backup:"
+          - "  ansible-playbook backup-restore.yml -e 'restore_backup=/opt/backups/backup-TIMESTAMP.tar.gz'"
+
+    - name: Create rollback info file
+      copy:
+        dest: /root/rollback-info.txt
+        content: |
+          Rollback Information
+          ====================
+          
+          Rollback Date: {{ ansible_date_time.iso8601 }}
+          Hostname: {{ inventory_hostname }}
+          
+          Components Rolled Back:
+          - SSH: {{ 'Yes' if rollback_ssh else 'No' }}
+          - Firewall: {{ 'Yes' if rollback_firewall else 'No' }}
+          - Users: {{ 'Yes' if rollback_users else 'No' }}
+          - Cloudflared: {{ 'Yes' if rollback_cloudflared else 'No' }}
+          
+          Backup Location: {{ backup_directory | default('/opt/backups') }}
+          
+          To re-apply security setup: ansible-playbook playbook.yml
+        mode: '0600'

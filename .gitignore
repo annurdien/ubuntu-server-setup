@@ -1,0 +1,51 @@
+# Sensitive files
+inventory.ini
+group_vars/all.yml
+group_vars/monitoring.yml
+host_vars/*.yml
+*.vault
+*.key
+*.pem
+*.ppk
+
+# SSH keys
+files/ssh_keys/*
+!files/ssh_keys/.gitkeep
+!files/ssh_keys/README.md
+
+# Cloudflare credentials
+cloudflare_credentials.yml
+*.tunnel.json
+
+# Backups
+backups/
+*.tar.gz
+*.backup
+
+# Ansible
+*.retry
+.ansible/
+ansible.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+tmp/
+temp/
+*.tmp

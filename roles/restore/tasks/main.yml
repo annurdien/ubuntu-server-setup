@@ -1,0 +1,30 @@
+---
+# Restore role - Restore from backups
+
+- name: Find latest backup
+  find:
+    paths: "{{ backup_directory }}"
+    patterns: "backup-*.tar.gz"
+  register: backup_files
+  when: restore_backup_file is not defined
+
+- name: Set backup file to restore
+  set_fact:
+    backup_to_restore: "{{ restore_backup_file | default((backup_files.files | sort(attribute='mtime', reverse=true) | first).path) }}"
+
+- name: Extract backup
+  unarchive:
+    src: "{{ backup_to_restore }}"
+    dest: /
+    remote_src: yes
+  when: backup_to_restore is defined
+
+- name: Restart services after restore
+  systemd:
+    name: "{{ item }}"
+    state: restarted
+  loop:
+    - sshd
+    - fail2ban
+    - ufw
+  ignore_errors: yes

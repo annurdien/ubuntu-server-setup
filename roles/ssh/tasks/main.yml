@@ -1,0 +1,17 @@
+---
+# SSH role - SSH hardening
+
+- name: Backup original sshd_config
+  copy:
+    src: /etc/ssh/sshd_config
+    dest: /etc/ssh/sshd_config.backup.{{ ansible_date_time.epoch }}
+    remote_src: yes
+    mode: '0600'
+
+- name: Configure SSH daemon
+  template:
+    src: sshd_config.j2
+    dest: /etc/ssh/sshd_config
+    validate: '/usr/sbin/sshd -t -f %s'
+    mode: '0600'
+  notify: restart sshd

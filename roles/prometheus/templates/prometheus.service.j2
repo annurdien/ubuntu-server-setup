@@ -1,0 +1,15 @@
+[Unit]
+Description=Prometheus
+After=network.target
+
+[Service]
+Type=simple
+User={{ prometheus_user }}
+ExecStart={{ prometheus_install_dir }}/prometheus \
+  --config.file={{ prometheus_config_dir }}/prometheus.yml \
+  --storage.tsdb.path={{ prometheus_data_dir }} \
+  --web.listen-address={{ prometheus_web_listen_address | default('0.0.0.0:9090') }}
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

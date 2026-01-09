@@ -1,0 +1,9 @@
+Port {{ ssh_port }}
+PermitRootLogin {{ ssh_permit_root_login }}
+PubkeyAuthentication {{ ssh_pubkey_authentication }}
+PasswordAuthentication {{ ssh_password_authentication }}
+MaxAuthTries {{ ssh_max_auth_tries | default(3) }}
+ClientAliveInterval {{ ssh_client_alive_interval | default(300) }}
+ClientAliveCountMax {{ ssh_client_alive_count_max | default(2) }}
+X11Forwarding {{ ssh_x11_forwarding | default('no') }}
+Subsystem sftp /usr/lib/openssh/sftp-server

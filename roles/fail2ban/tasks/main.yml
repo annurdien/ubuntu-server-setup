@@ -1,0 +1,20 @@
+---
+# Fail2Ban role - Setup intrusion prevention
+
+- name: Install Fail2Ban
+  apt:
+    name: fail2ban
+    state: present
+
+- name: Create Fail2Ban local jail configuration
+  template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    mode: '0644'
+  notify: restart fail2ban
+
+- name: Ensure Fail2Ban is enabled and started
+  systemd:
+    name: fail2ban
+    enabled: yes
+    state: started
